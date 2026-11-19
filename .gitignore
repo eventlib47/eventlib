@@ -1,33 +1,209 @@
-HELP.md
-target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+###############################################################################
+# REFERENCIA SOLO PARA REVISIÓN
+#
+# Este archivo NO es un .gitignore activo.
+# Está en formato .txt para que puedas revisarlo antes de copiar o adaptar
+# patrones al .gitignore real.
+#
+# Ubicación de referencia: raíz del repositorio microservice_AuthV2
+# Convención: los patrones son relativos a la raíz del repositorio.
+###############################################################################
 
-### STS ###
-.apt_generated
+
+###############################################################################
+# 1. NO VERSIONAR: artefactos de build y temporales
+###############################################################################
+
+# Maven / Java
+target/
+build/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar.gz
+
+# Reportes de tests y cobertura
+surefire-reports/
+failsafe-reports/
+jacoco.exec
+jacoco.xml
+site/
+apidocs/
+
+# Metadatos temporales de Maven
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Firmas y SBOM generados; se producen en target/
+*.asc
+*.sig
+bom.json
+bom.xml
+
+# Logs y temporales
+logs/
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+.history/
+
+
+###############################################################################
+# 2. NO VERSIONAR: secretos, credenciales y claves
+###############################################################################
+
+# Variables de entorno reales
+.env
+.env.*
+!.env.example
+
+# Claves privadas y almacenes de claves
+certs/server_key.pem
+*_key.pem
+*private*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.truststore
+
+# GPG
+*.gpg
+secring.gpg
+pubring.gpg
+trustdb.gpg
+
+# Archivos locales con credenciales
+contextoInicial/gpt_validar.txt
+**/application-local.properties
+**/application-*.local.properties
+**/application-secret*.properties
+**/secrets.properties
+**/credentials.properties
+
+# Capturas o archivos temporales de trabajo
+contextoInicial/ksnip_*.png
+
+
+###############################################################################
+# 3. NO VERSIONAR: configuración de IDE y sistema operativo
+###############################################################################
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Eclipse / STS
+.apt_generated/
 .classpath
 .factorypath
 .project
-.settings
+.settings/
 .springBeans
-.sts4-cache
+.sts4-cache/
 
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
+# NetBeans
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
+# VS Code
 .vscode/
+
+# macOS / Windows / Linux
+.DS_Store
+Thumbs.db
+.directory
+
+
+###############################################################################
+# 4. SÍ VERSIONAR: fuente y metadatos necesarios para construir/publicar
+###############################################################################
+
+# Estos NO deben ignorarse:
+# eventlib/pom.xml
+# eventlib/src/main/java/**
+# eventlib/src/main/resources/**
+# eventlib/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
+# eventlib/src/main/resources/META-INF/eventlib-defaults.yml
+# eventlib/src/main/resources/db/migration/V1__create_outbox_events.sql
+# eventlib/src/main/resources/db/migration/V2__outbox_hardening.sql
+# eventlib/src/test/**
+# eventlib/LICENSE
+# eventlib/NOTICE
+# eventlib/README.md
+# eventlib/CHANGELOG.md
+# eventlib/SECURITY.md
+# eventlib/.env.example
+# .github/workflows/**
+# auth-services/src/**
+# email-service/src/**
+# docker-compose.yml
+# rabbitmq.conf
+
+
+###############################################################################
+# 5. NO SE PUBLICA EN MAVEN CENTRAL, PERO SÍ PUEDE IR EN GIT
+###############################################################################
+
+# Documentación y material de trabajo:
+# eventlib/README.md
+# eventlib/README4.md
+# eventlib/README5.md
+# eventlib/README (3).md
+# eventlib/MANUAL.md
+# eventlib/DOCUMENTACION_TECNICA.md
+# eventlib/CHANGELOG.md
+# eventlib/SECURITY.md
+# eventlib/INFORME_PRODUCCION_MAVEN_CENTRAL.md
+# eventlib/INFORME_PRODUCCION_MAVEN_CENTRAL.html
+# eventlib/.env.example
+# eventlib/src/test/**
+# .github/workflows/**
+
+# Solo se publican los artefactos generados en eventlib/target/:
+# - eventlib-spring-boot-starter-1.0.1.pom
+# - eventlib-spring-boot-starter-1.0.1.jar
+# - eventlib-spring-boot-starter-1.0.1-sources.jar
+# - eventlib-spring-boot-starter-1.0.1-javadoc.jar
+# - sus firmas .asc y checksums
+# - SBOM adjunto, si se decide publicarlo
+
+
+###############################################################################
+# 6. ADVERTENCIA SOBRE ARCHIVOS YA TRACKEADOS
+###############################################################################
+
+# Si más adelante se activan patrones como *.pem, *.key o *.asc, los archivos
+# que ya están en Git siguen trackeados. Para dejar de versionarlos:
+#
+#   git rm --cached certs/server_key.pem
+#   git rm --cached contextoInicial/gpt_validar.txt
+#
+# Revisar antes con:
+#
+#   git ls-files | grep -E '\.(pem|key|p12|jks|asc)$'
+#   git status --short
+#
+# Nunca hacer commit de claves privadas ni de tokens, aunque el archivo
+# esté en .gitignore.
+###############################################################################

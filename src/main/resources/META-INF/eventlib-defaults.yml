@@ -5,6 +5,13 @@ eventlib:
   infra:
     rabbitmq:
       exchange: eventlib.exchange
+      declare-infrastructure: true
+      queue-type: classic
+      single-active-consumer: false
+      consumer-prefetch: 1
+      consumer-retry-delay: 2s
+      publisher-confirm-timeout-seconds: 10
+      publisher-max-retries: 3
       dlq:
         suffix: .dlq
       queues: {}
@@ -12,6 +19,15 @@ eventlib:
     redis:
       enabled: true
       idempotency-prefix: eventlib:idempotency
+      idempotency-ttl: 24h
+      claim-ttl: 30s
+      allow-no-op: false
 
     outbox:
       enabled: false
+      batch-size: 100
+      polling-interval: 5000
+      lock-enabled: true
+      lock-ttl: 60s
+      max-attempts: 5
+      retry-backoff: 3s

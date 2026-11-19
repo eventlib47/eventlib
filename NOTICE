@@ -1,8 +1,9 @@
-eventlib
+eventlib-spring-boot-starter
+Copyright (c) 2026 Elkim Andres Medranda Caicedo
 
-Copyright (c) 2026 Elkim Andres Medranda Caicedo 
+Este producto incluye software desarrollado por el Proyecto Apache Software Foundation.
 
 Project repository:
-https://github.com/elkimmedranda47/eventlib
+https://github.com/eventlib47/eventlib
 
 Licensed under the Apache License, Version 2.0.

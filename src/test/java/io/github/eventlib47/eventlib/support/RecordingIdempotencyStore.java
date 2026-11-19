@@ -1,0 +1,62 @@
+/*
+ * Licensed to Elkim Andres Medranda Caicedo under one or more
+ * contributor license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * Elkim Andres Medranda Caicedo licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.github.eventlib47.eventlib.support;
+
+import io.github.eventlib47.eventlib.consumer.idempotency.IdempotencyStore;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class RecordingIdempotencyStore implements IdempotencyStore {
+
+    public ClaimResult claimResult = ClaimResult.CLAIMED;
+    public boolean completeResult = true;
+    public boolean releaseResult = true;
+    public RuntimeException claimError;
+
+    public final AtomicInteger claims = new AtomicInteger();
+    public final AtomicInteger completions = new AtomicInteger();
+    public final AtomicInteger releases = new AtomicInteger();
+    public String lastEventId;
+    public String lastOwner;
+    public Duration lastTtl;
+
+    @Override
+    public Mono<ClaimResult> tryClaim(String eventId, String owner, Duration ttl) {
+        claims.incrementAndGet();
+        lastEventId = eventId;
+        lastOwner = owner;
+        lastTtl = ttl;
+        if (claimError != null) {
+            return Mono.error(claimError);
+        }
+        return Mono.just(claimResult);
+    }
+
+    @Override
+    public Mono<Boolean> markCompleted(String eventId, String owner) {
+        completions.incrementAndGet();
+        return Mono.just(completeResult);
+    }
+
+    @Override
+    public Mono<Boolean> releaseClaim(String eventId, String owner) {
+        releases.incrementAndGet();
+        return Mono.just(releaseResult);
+    }
+}

@@ -1,0 +1,100 @@
+# CI de eventlib (Bloques 5 y 6 del plan a producción).
+# - verify: unitarios + IT con Testcontainers + umbral de cobertura (-Pquality).
+# - Falla si los IT se omiten (disabledWithoutDocker=true los omitiría en silencio).
+# - security: OWASP Dependency-Check (-Psecurity), semanal y bajo demanda.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"   # lunes 06:00 UTC: re-evalúa CVEs aunque no haya commits
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Número mínimo de IT que deben COMPLETARSE (último reporte conocido: 25).
+  MIN_INTEGRATION_TESTS: "25"
+
+jobs:
+  verify:
+    # En el cron semanal solo corre el job de seguridad.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      # Docker ya está disponible en ubuntu-latest: Testcontainers levanta
+      # RabbitMQ, PostgreSQL y Redis reales. -Dgpg.skip evita firmar en CI.
+      - name: Build, unit + integration tests, coverage gate
+        run: mvn -B -ntp clean verify -Pquality -Dgpg.skip=true
+
+      - name: Fail if integration tests were skipped or are missing
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          import xml.etree.ElementTree as ET
+
+          path = "target/failsafe-reports/failsafe-summary.xml"
+          if not os.path.exists(path):
+              sys.exit("No existe " + path + ": Failsafe no se ejecutó.")
+
+          root = ET.parse(path).getroot()
+          completed = int(root.findtext("completed") or 0)
+          skipped = int(root.findtext("skipped") or 0)
+          problems = int(root.findtext("errors") or 0) + int(root.findtext("failures") or 0)
+          minimum = int(os.environ["MIN_INTEGRATION_TESTS"])
+
+          print(f"IT completados={completed} omitidos={skipped} con_fallos={problems} (mínimo={minimum})")
+          if skipped > 0:
+              sys.exit(f"{skipped} IT omitidos: ¿Docker no disponible en el runner?")
+          if problems > 0:
+              sys.exit(f"{problems} IT con fallos o errores.")
+          if completed < minimum:
+              sys.exit(f"Solo {completed} IT completados; se esperaban al menos {minimum}.")
+          PY
+
+      - name: Upload test, coverage and SBOM reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          if-no-files-found: warn
+          path: |
+            target/surefire-reports
+            target/failsafe-reports
+            target/site/jacoco
+            target/bom.*
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      # Falla con CVSS >= 7 (ver perfil 'security' del POM). Sin NVD_API_KEY la
+      # descarga de la base de datos es muy lenta o es rechazada.
+      - name: OWASP Dependency-Check
+        run: >
+          mvn -B -ntp verify -Psecurity -DskipTests -Dgpg.skip=true
+          -DnvdApiKey=${{ secrets.NVD_API_KEY }}
