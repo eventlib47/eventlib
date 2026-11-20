@@ -1,23 +1,23 @@
 # EventLib Spring Boot Starter
 
-Starter reactivo para publicar y consumir eventos de integración en microservicios Spring Boot. EventLib abstrae RabbitMQ, añade idempotencia atómica con Redis, un Transactional Outbox opcional sobre R2DBC y una política común de resiliencia con Reactor y Resilience4j.
+Starter reactivo. Librería para integración de eventos en arquitecturas de microservicios con Spring Boot. EventLib abstrae la publicación y consumo de eventos sobre RabbitMQ, y añade mecanismos de idempotencia atómica con Redis, un Transactional Outbox opcional sobre R2DBC y una política común de resiliencia con Reactor y Resilience4j.
 
 | Dato | Valor |
 |---|---|
 | Versión | `1.0.1` |
 | Java | 17+ (compilado con `java.version=17`) |
-| Spring Boot | 3.5.3 |
+| Spring Boot | 3.5.15 |
 | Licencia | Apache License 2.0 |
 | Broker soportado | RabbitMQ (AMQP 0-9-1) |
 | Persistencia del Outbox | PostgreSQL + R2DBC |
 | Coordenadas | `io.github.eventlib47:eventlib-spring-boot-starter:1.0.1` |
 
-> Este documento describe la versión `1.0.1`. Otros archivos del repositorio (`README (3).md`, `MANUAL.md`, `DOCUMENTACION_TECNICA.md`) pueden describir versiones o estructuras anteriores y deben tratarse como contexto histórico.
+> Este documento describe la versión `1.0.1`. EventLib es un starter de Spring Boot orientado a sistemas distribuidos y arquitecturas event-driven. Su objetivo es reducir el código de infraestructura que cada microservicio necesita para publicar, recibir y procesar eventos de integración de forma resiliente y (**desacoplar**) arquitecturas (monolíticas) que tengan problemas de **Escalabilidad**.
 
 ## Badges
 
 ![Java](https://img.shields.io/badge/Java-17%2B-orange)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.3-brightgreen)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.15-brightgreen)
 ![License](https://img.shields.io/badge/License-Apache%202.0-blue)
 ![Status](https://img.shields.io/badge/Status-Release%201.0.1-success)
 ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-Ready-orange)
@@ -58,6 +58,110 @@ EventLib se integra como starter de Spring Boot y aporta:
 El diseño es reactivo (Project Reactor). No incluye un ORM ni un driver R2DBC: el servicio aporta el driver de su base de datos. Tampoco incluye una implementación Kafka; los puertos `MessagePublisher`/`MessageReceiver` existen para permitirla en el futuro.
 
 ## 2. Inicio rápido
+### 2.0 Infraestructura local con Docker
+
+```yaml
+services:
+  # PostgreSQL Database (Outbox)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-eventlib}
+      POSTGRES_USER: ${POSTGRES_USER:-eventlib_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Definir POSTGRES_PASSWORD en .env}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - eventlib-network
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eventlib_user} -d ${POSTGRES_DB:-eventlib}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:?Definir RABBITMQ_PASS en .env}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    ports:
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"       # AMQP estándar
+      - "${RABBITMQ_TLS_PORT:-5671}:5671"        # TLS/SSL
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"    # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./certs/server_certificate.pem:/etc/rabbitmq/certs/server_certificate.pem:ro
+      - ./certs/server_key.pem:/etc/rabbitmq/certs/server_key.pem:ro
+      - ./certs/ca_certificate.pem:/etc/rabbitmq/certs/ca_certificate.pem:ro
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks:
+      - eventlib-network
+    restart: unless-stopped
+
+  # Redis para Idempotencia / Fencing (Opcional)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - eventlib-network
+    # restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory ${REDIS_MAXMEMORY:-256mb}
+      --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  redis_data:
+    driver: local
+  # prometheus_data:
+  #   driver: local
+  # grafana_data:
+  #   driver: local
+
+networks:
+  eventlib-network:
+    driver: bridge
+```
+
+```bash
+docker compose up -d
+```
+
+`postgres` monta `./init-db.sql` — ahí va el script de `outbox_events` (ver [Patrón Transactional Outbox](#patrón-transactional-outbox)).
+
+**`[DISEÑADO]`** Si vas a probar el modo `X_CONSISTENT_HASH`, el broker necesita el plugin extra habilitado:
+
+```bash
+docker compose exec rabbitmq rabbitmq-plugins enable rabbitmq_consistent_hash_exchange
+```
+
+
+
+
+
+
+
+
+
 
 ### 2.1 Dependencia
 
@@ -118,6 +222,7 @@ public class UserRegisteredEvent extends IntegrationEvent {
 
 Publicación directa (Outbox desactivado):
 
+
 ```java
 import io.github.eventlib47.eventlib.producer.EventPublisher;
 import org.springframework.stereotype.Service;
@@ -141,12 +246,37 @@ public class RegistrationService {
 
 Publicación transaccional (Outbox activado):
 
+
+> **Nota:** `@EnableR2dbcRepositories` en el `main` del productor,
+Apuntar al paquete R2DBC **de tu propio microservicio**. El Outbox de `eventlib` funciona si tu repositorios es R2DBC, no necesitas esta anotación si `eventlib.infra.outbox.enabled=false no nesecitas esta notacion:
+`@EnableR2dbcRepositories(basePackageClasses = OutboxRepository.class)`.
+
+
+
+```java
+package com.example.auth_services;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
+
+@SpringBootApplication
+@EnableR2dbcRepositories(basePackages = "com.example.auth_services.infrastructure.repository.r2dbc")
+public class AuthServicesApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(AuthServicesApplication.class, args);
+    }
+}
+```
+Productor con **Transactional** en su **logica de negocio** (Outbox activado):
+
 ```java
 import io.github.eventlib47.eventlib.producer.OutboxEventPublisher;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 @Service
+@org.springframework.transaction.annotation.Transactional
 public class RegistrationService {
 
     private final OutboxEventPublisher outboxPublisher;
@@ -163,7 +293,7 @@ public class RegistrationService {
 }
 ```
 
-Con `eventlib.infra.outbox.enabled=true`, el bean `EventPublisher` es `OutboxEventPublisher`. Si llamas directamente a `publish(...)`, debes hacerlo dentro de una transacción R2DBC (por defecto `require-transaction=true`). `executeAndPublish(...)` encapsula operación de negocio y evento en una sola transacción.
+Con `eventlib.infra.outbox.enabled=true`, el bean `EventPublisher` es `OutboxEventPublisher`. Si llamas directamente a `publish(...)`, debes hacerlo dentro de una transacción R2DBC (por defecto `require-transaction=true`). `executeAndPublish(...)` encapsula operación de negocio y evento en una sola transacción, Garantiza que, si el usuario no se guarda en la base de datos, el evento no se envíe al broker.
 
 ### 2.5 Consumidor
 
@@ -288,7 +418,7 @@ mvn -f eventlib/pom.xml clean install -DskipTests -Dgpg.skip=true
 mvn -q -pl auth-services,email-service -am -DskipTests compile
 ```
 
-La suite unitaria actual tiene **28 pruebas** y cubre dispatcher/idempotencia, serialización, decisiones ACK/NACK, outbox, publisher y declaración de infraestructura. No hay pruebas `*IT` versionadas todavía; las dependencias de Testcontainers están disponibles para incorporarlas.
+La suite unitaria actual tiene **53 pruebas** y cubre dispatcher/idempotencia, serialización, decisiones ACK/NACK, outbox, publisher y declaración de infraestructura. No hay pruebas `*IT` versionadas todavía; las dependencias de Testcontainers están disponibles para incorporarlas.
 
 ## 3. Características principales
 
@@ -506,7 +636,7 @@ eventlib/
 └── target/                    # generado; no versionar
 ```
 
-El workflow de CI vive en la raíz del repositorio (`.github/workflows/ci.yml`), no dentro de `eventlib/`.
+El workflow de CI vive en la raíz del repositorio (`../contextoInicial/.github/workflows/ci.yml`), no dentro de `eventlib/`.
 
 ## 8. Configuración
 
@@ -955,7 +1085,7 @@ mvn -q -pl auth-services,email-service -am -DskipTests compile
 
 ### 15.3 CI
 
-`.github/workflows/ci.yml` ejecuta:
+`../contextoInicial/.github/workflows/ci.yml` ejecuta:
 
 1. `mvn -B -f eventlib/pom.xml clean verify -Dgpg.skip=true`.
 2. Instalación local del starter.
